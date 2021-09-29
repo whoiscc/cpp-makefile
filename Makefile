@@ -1,8 +1,5 @@
 #
-d := $(dir $(lastword $(MAKEFILE_LIST)))
 PROJECT := Server
-.PHONY: all
-all: $(PROJECT)
 
 
 # build tools
@@ -21,14 +18,47 @@ $(foreach bin,$(1),$(eval LDFLAGS-$(bin) += $(2)))
 endef
 
 
+d :=
+o = .obj/$(d)
 # source list
 SRCS += \
-	Source/Main.cc
+	$(d)Source/Main.cc
 TEST_SRCS += 
 $(call add-CFLAGS,$(TEST_SRCS),-I./Source)
 
 
-# compilation rule
+# main executable
+$(d)$(PROJECT): $(SRCS:%.cc=.obj/%.o)
+BINS += $(d)$(PROJECT)
+run: $(d)$(PROJECT)
+	$(call trace,RUN,$<,./$<)
+
+
+# test executable and libraries
+# apt install libgtest-dev
+GTEST_DIR := /usr/src/gtest
+GTEST := .obj/gtest/gtest.a
+GTEST_MAIN := .obj/gtest/gtest_main.a
+GTEST_INTERNAL_SRCS := $(wildcard $(GTEST_DIR)/src/*.cc)
+$(call add-CFLAGS,$(GTEST_INTERNAL_SRCS),-pthread -I$(GTEST_DIR) -Wno-missing-field-initializers)
+GTEST_OBJS := $(patsubst %.cc,.obj/gtest/%.o,$(notdir $(GTEST_INTERNAL_SRCS)))
+$(GTEST_OBJS): .obj/gtest/%.o: $(GTEST_DIR)/src/%.cc
+	$(call compilecxx,CXX,)
+$(GTEST): .obj/gtest/gtest-all.o
+	$(call trace,AR,$@,$(AR) $(ARFLAGS) $@ $^)
+$(GTEST_MAIN): .obj/gtest/gtest-all.o .obj/gtest/gtest_main.o
+	$(call trace,AR,$@,$(AR) $(ARFLAGS) $@ $^)
+$(d)RunTest: $(TEST_SRCS:%.cc=.obj/%.o) $(GTEST_MAIN)
+$(call add-LDFLAGS,$(d)RunTest,-pthread)
+BINS += $(d)RunTest
+.PHONY: test
+test: $(d)RunTest
+	$(call trace,RUN,$<,./$<)
+
+# include sub-Makefiles
+
+
+# universal building rule
 ifeq ($(V),1)
 trace = $(3)
 Q =
@@ -50,37 +80,8 @@ $(OBJS): .obj/%.o: %.cc
 	$(call compilecxx)
 DEPS := $(OBJS:.o=.d) $(OBJS:.o=-pic.d)
 -include $(DEPS)
-
-
-# main executable
-$(PROJECT): $(SRCS:%.cc=.obj/%.o)
+$(BINS): %:
 	$(call trace,LD,$@,$(LD) -o $@ $^ $(LDFLAGS) $(LDFLAGS-$@))
-BINS += $(PROJECT)
-run: $(PROJECT)
-	$(call trace,RUN,$<,$(d)$<)
-
-
-# test executable
-# apt install libgtest-dev
-GTEST_DIR := /usr/src/gtest
-GTEST := .obj/gtest/gtest.a
-GTEST_MAIN := .obj/gtest/gtest_main.a
-GTEST_INTERNAL_SRCS := $(wildcard $(GTEST_DIR)/src/*.cc)
-$(call add-CFLAGS,$(GTEST_INTERNAL_SRCS),-pthread -I$(GTEST_DIR) -Wno-missing-field-initializers)
-GTEST_OBJS := $(patsubst %.cc,.obj/gtest/%.o,$(notdir $(GTEST_INTERNAL_SRCS)))
-$(GTEST_OBJS): .obj/gtest/%.o: $(GTEST_DIR)/src/%.cc
-	$(call compilecxx,CXX,)
-$(GTEST): .obj/gtest/gtest-all.o
-	$(call trace,AR,$@,$(AR) $(ARFLAGS) $@ $^)
-$(GTEST_MAIN): .obj/gtest/gtest-all.o .obj/gtest/gtest_main.o
-	$(call trace,AR,$@,$(AR) $(ARFLAGS) $@ $^)
-RunTest:  $(GTEST_MAIN)
-	$(call trace,LD,$@,$(LD) -o $@ $^ $(LDFLAGS) $(LDFLAGS-$@))
-$(call add-LDFLAGS,RunTest,-pthread)
-BINS += RunTest
-.PHONY: test
-test: RunTest
-	$(call trace,RUN,$<,$(d)$<)
 
 
 # clean up

@@ -10,3 +10,4 @@ Features:
 * Automatically dependency management for source files, only need to list dependent objects for each target.
 * Googletest integrated.
 * Pretty printing.
+* Extensible by including sub-Makefiles.
